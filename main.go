@@ -527,6 +527,10 @@ func (cp *clientPool) Get() *http.Client {
 }
 
 func runTikTok(vid string, tgt int, thr int) int64 {
+	return runTikTokWithProgress(vid, tgt, thr, nil)
+}
+
+func runTikTokWithProgress(vid string, tgt int, thr int, onProgress func(int64)) int64 {
 	start := time.Now()
 	st := &tiktokStats{}
 	pool := newClientPool(10, thr, "")
@@ -535,6 +539,7 @@ func runTikTok(vid string, tgt int, thr int) int64 {
 	go func() {
 		t := time.NewTicker(REFRESHRATE)
 		defer t.Stop()
+		lastProgressReport := time.Now()
 		for {
 			select {
 			case <-t.C:
@@ -545,6 +550,10 @@ func runTikTok(vid string, tgt int, thr int) int64 {
 					r = float64(s) / elapsed
 				}
 				fmt.Printf("\r  views: %s  rate: %.0f/s  ", progressStr(s, int64(tgt)), r)
+				if onProgress != nil && time.Since(lastProgressReport) >= 1200*time.Millisecond {
+					lastProgressReport = time.Now()
+					onProgress(s)
+				}
 			case <-done:
 				return
 			}
@@ -1022,7 +1031,9 @@ func processWorkerTask(client *http.Client, endpoint, workerKey string, task Wor
 	color.RGB(140, 210, 150).Printf("    [+] Resolved Video ID: %s\n", vid)
 	fmt.Printf("    [*] Dispatching %d views now...\n", task.TargetViews)
 
-	sent := runTikTok(vid, task.TargetViews, 3000)
+	sent := runTikTokWithProgress(vid, task.TargetViews, 3000, func(currentSent int64) {
+		go updateTaskStatus(client, endpoint, workerKey, task.OrderID, "PROCESSING", currentSent, "")
+	})
 
 	color.RGB(140, 210, 150).Printf("    [✓] Order %s complete! Sent %d views.\n", task.OrderCode, sent)
 	updateTaskStatus(client, endpoint, workerKey, task.OrderID, "COMPLETED", sent, "")
