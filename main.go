@@ -1013,13 +1013,45 @@ func runStoreWorker(siteURL, workerKey string) {
 	}
 }
 
+func claimTask(client *http.Client, endpoint, workerKey, orderID string) bool {
+	payload := map[string]interface{}{
+		"action":  "claim",
+		"orderId": orderID,
+	}
+	b, _ := json.Marshal(payload)
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(b))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-worker-key", workerKey)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	var res struct {
+		Success bool `json:"success"`
+		Claimed bool `json:"claimed"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err == nil {
+		return res.Success && res.Claimed
+	}
+	return false
+}
+
 func processWorkerTask(client *http.Client, endpoint, workerKey string, task WorkerTask) {
-	color.RGB(120, 200, 220).Printf("\n[>] Processing Order %s for %s\n", task.OrderCode, task.CustomerEmail)
+	// Atomic claim: ensure this worker exclusively owns the order
+	if !claimTask(client, endpoint, workerKey, task.OrderID) {
+		color.RGB(220, 190, 120).Printf("\n[-] Order %s already claimed by another worker node. Skipping.\n", task.OrderCode)
+		return
+	}
+
+	color.RGB(120, 200, 220).Printf("\n[✓] Atomically Claimed Order %s for %s\n", task.OrderCode, task.CustomerEmail)
 	fmt.Printf("    Target Link: %s\n", task.TikTokURL)
 	fmt.Printf("    Views Target: %d views\n", task.TargetViews)
-
-	// Send processing update
-	updateTaskStatus(client, endpoint, workerKey, task.OrderID, "PROCESSING", 0, "")
 
 	vid, err := getvid(task.TikTokURL)
 	if err != nil {
