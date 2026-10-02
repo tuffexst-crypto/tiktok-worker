@@ -441,7 +441,7 @@ func sendview(c *http.Client, vid string, st *tiktokStats) {
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 
-	if resp.StatusCode == 200 && strings.Contains(resp.Header.Get("Content-Type"), "charset=utf-8") {
+	if resp.StatusCode == 200 {
 		st.s.Add(1)
 	} else {
 		st.f.Add(1)
@@ -491,7 +491,7 @@ func sendshare(c *http.Client, vid string, st *tiktokStats) {
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 
-	if resp.StatusCode == 200 && strings.Contains(resp.Header.Get("Content-Type"), "charset=utf-8") {
+	if resp.StatusCode == 200 {
 		st.s.Add(1)
 	} else {
 		st.f.Add(1)
